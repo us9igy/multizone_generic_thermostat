@@ -11,20 +11,50 @@ from datetime import timedelta
 from datetime import datetime
 
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
-from homeassistant.components.climate.const import (
-    ATTR_PRESET_MODE,
-    CURRENT_HVAC_COOL,
-    CURRENT_HVAC_HEAT,
-    CURRENT_HVAC_IDLE,
-    CURRENT_HVAC_OFF,
-    HVAC_MODE_COOL,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_OFF,
-    PRESET_AWAY,
-    PRESET_NONE,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE,
-)
+try:
+    # New imports for the latest Home Assistant versions
+    from homeassistant.components.climate import (
+        ClimateEntityFeature,
+        HVACMode,
+        HVACAction,
+    )
+    from homeassistant.components.climate.const import (
+        ATTR_PRESET_MODE,
+        PRESET_AWAY,
+        PRESET_NONE,
+    )
+except ImportError:
+    # Fallback for older Home Assistant versions with deprecated constants
+    from homeassistant.components.climate.const import (
+        ATTR_PRESET_MODE,
+        CURRENT_HVAC_COOL as HVACAction_COOLING,
+        CURRENT_HVAC_HEAT as HVACAction_HEATING,
+        CURRENT_HVAC_IDLE as HVACAction_IDLE,
+        CURRENT_HVAC_OFF as HVACAction_OFF,
+        HVAC_MODE_COOL as HVACMode_COOL,
+        HVAC_MODE_HEAT as HVACMode_HEAT,
+        HVAC_MODE_OFF as HVACMode_OFF,
+        PRESET_AWAY,
+        PRESET_NONE,
+        SUPPORT_PRESET_MODE as ClimateEntityFeature_PRESET_MODE,
+        SUPPORT_TARGET_TEMPERATURE as ClimateEntityFeature_TARGET_TEMPERATURE,
+    )
+    # Create mock classes for backward compatibility if ImportError
+    ClimateEntityFeature = type("ClimateEntityFeature", (), {
+        "PRESET_MODE": ClimateEntityFeature_PRESET_MODE,
+        "TARGET_TEMPERATURE": ClimateEntityFeature_TARGET_TEMPERATURE,
+    })
+    HVACMode = type("HVACMode", (), {
+        "COOL": HVACMode_COOL,
+        "HEAT": HVACMode_HEAT,
+        "OFF": HVACMode_OFF,
+    })
+    HVACAction = type("HVACAction", (), {
+        "COOLING": HVACAction_COOLING,
+        "HEATING": HVACAction_HEATING,
+        "IDLE": HVACAction_IDLE,
+        "OFF": HVACAction_OFF,
+    })
 
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -103,7 +133,7 @@ CONF_ON_DURATION_RULE = "on_duration_rule"
 CONF_MAX_ON_DURATION = "max_on_duration"
 CONF_MIN_OFF_DURATION = "min_off_duration"
 
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
+SUPPORT_FLAGS = ClimateEntityFeature.TARGET_TEMPERATURE
 
 OPEN_WINDIW_SCHEMA = vol.Schema(
         {
@@ -188,7 +218,7 @@ PLATFORM_SCHEMA = vol.All(
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
         vol.Optional(CONF_KEEP_ALIVE): cv.positive_time_period,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
+            [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]
         ),
         vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_PRECISION): vol.In(
@@ -672,9 +702,9 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
             z._saved_target_temp = z._target_temp or away_temp
         self._temp_precision = precision
         if self.ac_mode:
-            self._hvac_list = [HVAC_MODE_COOL, HVAC_MODE_OFF]
+            self._hvac_list = [HVACMode.COOL, HVACMode.OFF]
         else:
-            self._hvac_list = [HVAC_MODE_HEAT, HVAC_MODE_OFF]
+            self._hvac_list = [HVACMode.HEAT, HVACMode.OFF]
         self._active = False
         self._cur_temp = None
         self._temp_lock = asyncio.Lock()
@@ -684,7 +714,7 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
         self._unique_id = unique_id
         self._support_flags = SUPPORT_FLAGS
         if away_temp:
-            self._support_flags = SUPPORT_FLAGS | SUPPORT_PRESET_MODE
+            self._support_flags = SUPPORT_FLAGS | ClimateEntityFeature_PRESET_MODE
         self._away_temp = away_temp
         self._is_away = False
         self._isWindowOpenBinarySensor = IsWindowOpenSensor(hass, name)
@@ -819,7 +849,7 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
 
         # Set default state to off
         if not self._hvac_mode:
-            self._hvac_mode = HVAC_MODE_OFF
+            self._hvac_mode = HVACMode.OFF
 
     @property
     def should_poll(self):
@@ -884,15 +914,15 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
     def hvac_action(self):
         """Return the current running hvac operation if supported.
 
-        Need to be one of CURRENT_HVAC_*.
+        Need to be one of HVACAction.*.
         """
-        if self._hvac_mode == HVAC_MODE_OFF:
-            return CURRENT_HVAC_OFF
+        if self._hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
         if not self._is_device_active:
-            return CURRENT_HVAC_IDLE
+            return HVACAction.IDLE
         if self.ac_mode:
-            return CURRENT_HVAC_COOL
-        return CURRENT_HVAC_HEAT
+            return HVACAction.COOLING
+        return HVACAction.HEATING
 
     @property
     def target_temperature(self):
@@ -920,14 +950,14 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""
-        if hvac_mode == HVAC_MODE_HEAT:
-            self._hvac_mode = HVAC_MODE_HEAT
+        if hvac_mode == HVACMode.HEAT:
+            self._hvac_mode = HVACMode.HEAT
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_COOL:
-            self._hvac_mode = HVAC_MODE_COOL
+        elif hvac_mode == HVACMode.COOL:
+            self._hvac_mode = HVACMode.COOL
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_OFF:
-            self._hvac_mode = HVAC_MODE_OFF
+        elif hvac_mode == HVACMode.OFF:
+            self._hvac_mode = HVACMode.OFF
             if self._is_device_active:
                 await self._async_heater_turn_off()
         else:
@@ -1086,7 +1116,7 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
                     self._selected_zone.get_cur_temp(),
                 )
 
-            if not self._active or self._hvac_mode == HVAC_MODE_OFF:
+            if not self._active or self._hvac_mode == HVACMode.OFF:
                 _LOGGER.info("_async_control_heating exit - nota active")
                 return
 
@@ -1101,7 +1131,7 @@ class MultizoneGenericThermostat(ClimateEntity, RestoreEntity):
                     if self._is_device_active:
                         current_state = STATE_ON
                     else:
-                        current_state = HVAC_MODE_OFF
+                        current_state = HVACMode.OFF
                     long_enough = condition.state(
                         self.hass,
                         self.heater_entity_id,

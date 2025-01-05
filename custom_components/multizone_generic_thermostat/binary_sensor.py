@@ -6,7 +6,14 @@ import voluptuous as vol
 from datetime import timedelta
 from datetime import datetime
 
-from homeassistant.components.binary_sensor import PLATFORM_SCHEMA, ENTITY_ID_FORMAT, DEVICE_CLASS_OPENING
+from homeassistant.components.binary_sensor import PLATFORM_SCHEMA, ENTITY_ID_FORMAT
+
+try:
+    from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+    DEVICE_CLASS_OPENING = BinarySensorDeviceClass.OPENING
+except ImportError:
+    # Fallback for older versions
+    from homeassistant.components.binary_sensor import DEVICE_CLASS_OPENING
 from homeassistant.helpers.entity import async_generate_entity_id
 
 from homeassistant.const import (
